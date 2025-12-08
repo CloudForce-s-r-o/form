@@ -2,31 +2,61 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <title>Test API</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ověření stavu</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 40px;
+    }
+    .box {
+      max-width: 400px;
+      background: white;
+      padding: 25px;
+      margin: 0 auto;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .result {
+      font-size: 28px;
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
 
-<h2>Výsledek kontroly:</h2>
-<p id="status">Kontroluji…</p>
+<div class="box">
+  <h2>Kontrola stavu</h2>
+  <div id="loading">Načítám...</div>
+  <div id="result" class="result"></div>
+</div>
 
 <script>
-  const endpoint = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
+  const url = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
 
-  async function check() {
+  async function checkStatus() {
     try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ test: true })
-      });
+      const response = await fetch(url, { method: "POST" }); // nebo GET pokud chceš GET
+      const text = await response.text();
 
-      document.getElementById("status").textContent = res.ok ? "OK" : "NOK";
+      document.getElementById("loading").style.display = "none";
+
+      if (text.trim() === "Ano") {
+        document.getElementById("result").textContent = "OK";
+        document.getElementById("result").style.color = "green";
+      } else {
+        document.getElementById("result").textContent = "Nic";
+        document.getElementById("result").style.color = "red";
+      }
     } catch (err) {
-      document.getElementById("status").textContent = "NOK (chyba připojení)";
+      document.getElementById("loading").textContent = "Chyba komunikace: " + err.message;
     }
   }
 
-  check();
+  checkStatus();
 </script>
 
 </body>
