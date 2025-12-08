@@ -105,7 +105,7 @@ if (!USER_ID) {
 // ---------------------------
 async function loadData() {
     try {
-        const res = await fetch("YOUR_URL_HERE", {
+        const res = await fetch("https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: USER_ID })
