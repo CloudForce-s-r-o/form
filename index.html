@@ -1,107 +1,180 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-  <meta charset="UTF-8">
-  <title>Seznámení s dokumenty</title>
-  <style>
-    body { font-family: Arial; margin: 30px; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 30px; }
-    th, td { border: 1px solid #ccc; padding: 8px; }
-    th { background: #f0f0f0; }
-    h2 { margin-top: 40px; }
-    #loading { font-size: 18px; }
-    #confirmBtn { padding: 12px 20px; font-size: 16px; cursor: pointer; }
-  </style>
+    <meta charset="UTF-8" />
+    <title>Seznámení s dokumenty</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 10px;
+            border: 1px solid #bbb;
+            background: #fff;
+        }
+        th {
+            background: #e6e6e6;
+        }
+        .hidden {
+            display: none;
+        }
+        #confirmBtn {
+            margin-top: 25px;
+            padding: 12px 20px;
+            font-size: 16px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+        #confirmBtn:hover {
+            background: #004c99;
+        }
+        #errorMsg {
+            color: red;
+            font-weight: bold;
+        }
+    </style>
 </head>
-<body>
 
-<h1>Seznámení s dokumenty</h1>
+<body>
+<h1>Seznámení s řízenou dokumentací</h1>
+<div id="errorMsg"></div>
 
 <div id="loading">Načítám data…</div>
 
-<div id="content" style="display:none;">
-  <h2>Dokumenty k seznámení</h2>
-  <table id="todoTable">
-    <thead>
-      <tr>
-        <th>Název dokumentu</th>
-        <th>Datum požadavku</th>
-        <th>Odkaz na dokument</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+<div id="content" class="hidden">
+    <h2>Dokumenty čekající na seznámení</h2>
+    <table id="pendingTable">
+        <thead>
+            <tr>
+                <th>Název dokumentu</th>
+                <th>Datum požadavku</th>
+                <th>Odkaz</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
-  <h2>Již seznámené dokumenty</h2>
-  <table id="doneTable">
-    <thead>
-      <tr>
-        <th>Název dokumentu</th>
-        <th>Datum požadavku</th>
-        <th>Datum seznámení</th>
-        <th>Odkaz na dokument</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+    <h2>Dokumenty již seznámené</h2>
+    <table id="doneTable">
+        <thead>
+            <tr>
+                <th>Název dokumentu</th>
+                <th>Datum požadavku</th>
+                <th>Datum seznámení</th>
+                <th>Odkaz</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
-  <button id="confirmBtn" style="display:none;">Potvrdit seznámení s dokumenty</button>
+    <button id="confirmBtn" class="hidden">Potvrdit seznámení s dokumenty</button>
 </div>
 
 <script>
-const URL = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
+// ---------------------------
+// 1️⃣ ZÍSKÁNÍ ID Z PARAMETRU
+// ---------------------------
+function getIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("id");
+}
 
+const USER_ID = getIdFromUrl();
+
+if (!USER_ID) {
+    document.getElementById("errorMsg").innerText = "Chybí parametr ?id= v URL!";
+}
+
+// ---------------------------
+// 2️⃣ NAČTENÍ DAT Z BACKENDU
+// ---------------------------
 async function loadData() {
     try {
-        const response = await fetch(URL, { method: "POST" }); 
-        const data = await response.json();
+        const res = await fetch("YOUR_URL_HERE", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: USER_ID })
+        });
 
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("content").style.display = "block";
+        if (!res.ok) {
+            throw new Error("Chyba komunikace s API.");
+        }
 
-        const todo = data.filter(x => !x.datumSeznameni);
-        const done = data.filter(x => x.datumSeznameni);
-
-        fillTodo(todo);
-        fillDone(done);
-
-        document.getElementById("confirmBtn").style.display = 
-            todo.length > 0 ? "block" : "none";
-
-    } catch (err) {
-        document.getElementById("loading").innerText = "Chyba při načítání dat.";
+        const data = await res.json();
+        renderTables(data);
+    } catch (e) {
+        document.getElementById("errorMsg").innerText =
+            "Nepodařilo se načíst data: " + e.message;
     }
 }
 
-function fillTodo(list) {
-    const tbody = document.querySelector("#todoTable tbody");
-    list.forEach(item => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${item.nazevSouboru}</td>
-            <td>${item.datumPozadavku}</td>
-            <td><a href="${item.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
-function fillDone(list) {
-    const tbody = document.querySelector("#doneTable tbody");
-    list.forEach(item => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-            <td>${item.nazevSouboru}</td>
-            <td>${item.datumPozadavku}</td>
-            <td>${item.datumSeznameni}</td>
-            <td><a href="${item.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
-        `;
-        tbody.appendChild(tr);
-    });
-}
-
 loadData();
-</script>
 
+// ---------------------------
+// 3️⃣ VYKRESLENÍ TABULEK
+// ---------------------------
+function renderTables(data) {
+    document.getElementById("loading").classList.add("hidden");
+    document.getElementById("content").classList.remove("hidden");
+
+    const pendingTbody = document.querySelector("#pendingTable tbody");
+    const doneTbody = document.querySelector("#doneTable tbody");
+
+    pendingTbody.innerHTML = "";
+    doneTbody.innerHTML = "";
+
+    let hasPending = false;
+
+    data.forEach(doc => {
+        const row = document.createElement("tr");
+
+        if (doc.datumSeznameni === "" || doc.datumSeznameni === null) {
+            // čekající na seznámení
+            hasPending = true;
+            row.innerHTML = `
+                <td>${doc.nazevSouboru}</td>
+                <td>${doc.datumPozadavku}</td>
+                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
+            `;
+            pendingTbody.appendChild(row);
+        } else {
+            // již seznámené
+            row.innerHTML = `
+                <td>${doc.nazevSouboru}</td>
+                <td>${doc.datumPozadavku}</td>
+                <td>${doc.datumSeznameni}</td>
+                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
+            `;
+            doneTbody.appendChild(row);
+        }
+    });
+
+    // ---------------------------
+    // 4️⃣ ZOBRAZENÍ/ SKRYTÍ TLAČÍTKA
+    // ---------------------------
+    const btn = document.getElementById("confirmBtn");
+    if (hasPending) {
+        btn.classList.remove("hidden");
+    } else {
+        btn.classList.add("hidden");
+    }
+}
+
+</script>
 </body>
 </html>
