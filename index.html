@@ -41,7 +41,6 @@
 <div id="loading">Načítám data…</div>
 
 <div id="content" class="hidden">
-    <div class="small">Formulář ID: <span id="formIdDisplay"></span></div>
     <button id="refreshBtn">Obnovit seznam</button>
 
     <h2>Dokumenty čekající na seznámení</h2>
@@ -87,7 +86,6 @@ function getIdFromUrl() {
     return params.get("id");
 }
 const USER_ID = getIdFromUrl();
-document.getElementById("formIdDisplay").textContent = USER_ID ?? "(nenalezeno)";
 
 if (!USER_ID) {
     document.getElementById("errorMsg").innerText = "Chybí parametr ?id= v URL!";
