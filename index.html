@@ -1,180 +1,69 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-    <meta charset="UTF-8" />
-    <title>Seznámení s dokumenty</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        h1, h2 {
-            color: #333;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #bbb;
-            background: #fff;
-        }
-        th {
-            background: #e6e6e6;
-        }
-        .hidden {
-            display: none;
-        }
-        #confirmBtn {
-            margin-top: 25px;
-            padding: 12px 20px;
-            font-size: 16px;
-            background: #0066cc;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 6px;
-        }
-        #confirmBtn:hover {
-            background: #004c99;
-        }
-        #errorMsg {
-            color: red;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test API ověření</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 30px;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .ok { color: green; }
+    .nok { color: red; }
+  </style>
 </head>
-
 <body>
-<h1>Seznámení s řízenou dokumentací</h1>
-<div id="errorMsg"></div>
 
-<div id="loading">Načítám data…</div>
+<h2>Ověření stavu</h2>
+<p>ID z URL: <span id="idValue"></span></p>
 
-<div id="content" class="hidden">
-    <h2>Dokumenty čekající na seznámení</h2>
-    <table id="pendingTable">
-        <thead>
-            <tr>
-                <th>Název dokumentu</th>
-                <th>Datum požadavku</th>
-                <th>Odkaz</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-
-    <h2>Dokumenty již seznámené</h2>
-    <table id="doneTable">
-        <thead>
-            <tr>
-                <th>Název dokumentu</th>
-                <th>Datum požadavku</th>
-                <th>Datum seznámení</th>
-                <th>Odkaz</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
-    </table>
-
-    <button id="confirmBtn" class="hidden">Potvrdit seznámení s dokumenty</button>
-</div>
+<div id="status">Načítám…</div>
 
 <script>
-// ---------------------------
-// 1️⃣ ZÍSKÁNÍ ID Z PARAMETRU
-// ---------------------------
-function getIdFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("id");
-}
+  // === 1) Načti ID z URL ===
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("id");
 
-const USER_ID = getIdFromUrl();
+  document.getElementById("idValue").textContent = id ?? "(nenalezeno)";
 
-if (!USER_ID) {
-    document.getElementById("errorMsg").innerText = "Chybí parametr ?id= v URL!";
-}
+  const statusEl = document.getElementById("status");
 
-// ---------------------------
-// 2️⃣ NAČTENÍ DAT Z BACKENDU
-// ---------------------------
-async function loadData() {
-    try {
-        const res = await fetch("https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: USER_ID })
-        });
+  // Pokud ID není, ani nevoláme API
+  if (!id) {
+    statusEl.textContent = "Chybí parametr ?id= v URL.";
+    statusEl.className = "nok";
+  } else {
+    // === 2) Endpoint pro ověření ===
+    const endpoint = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
 
-        if (!res.ok) {
-            throw new Error("Chyba komunikace s API.");
-        }
-
-        const data = await res.json();
-        renderTables(data);
-    } catch (e) {
-        document.getElementById("errorMsg").innerText =
-            "Nepodařilo se načíst data: " + e.message;
-    }
-}
-
-loadData();
-
-// ---------------------------
-// 3️⃣ VYKRESLENÍ TABULEK
-// ---------------------------
-function renderTables(data) {
-    document.getElementById("loading").classList.add("hidden");
-    document.getElementById("content").classList.remove("hidden");
-
-    const pendingTbody = document.querySelector("#pendingTable tbody");
-    const doneTbody = document.querySelector("#doneTable tbody");
-
-    pendingTbody.innerHTML = "";
-    doneTbody.innerHTML = "";
-
-    let hasPending = false;
-
-    data.forEach(doc => {
-        const row = document.createElement("tr");
-
-        if (doc.datumSeznameni === "" || doc.datumSeznameni === null) {
-            // čekající na seznámení
-            hasPending = true;
-            row.innerHTML = `
-                <td>${doc.nazevSouboru}</td>
-                <td>${doc.datumPozadavku}</td>
-                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
-            `;
-            pendingTbody.appendChild(row);
-        } else {
-            // již seznámené
-            row.innerHTML = `
-                <td>${doc.nazevSouboru}</td>
-                <td>${doc.datumPozadavku}</td>
-                <td>${doc.datumSeznameni}</td>
-                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
-            `;
-            doneTbody.appendChild(row);
-        }
+    // === 3) Call API ===
+    fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: id })
+    })
+    .then(async (response) => {
+      // 4) Rozhodnutí podle HTTP status
+      if (response.ok) {
+        statusEl.textContent = "OK";
+        statusEl.className = "ok";
+      } else {
+        statusEl.textContent = "NOK";
+        statusEl.className = "nok";
+      }
+    })
+    .catch((err) => {
+      statusEl.textContent = "Chyba komunikace: " + err.message;
+      statusEl.className = "nok";
     });
-
-    // ---------------------------
-    // 4️⃣ ZOBRAZENÍ/ SKRYTÍ TLAČÍTKA
-    // ---------------------------
-    const btn = document.getElementById("confirmBtn");
-    if (hasPending) {
-        btn.classList.remove("hidden");
-    } else {
-        btn.classList.add("hidden");
-    }
-}
-
+  }
 </script>
+
 </body>
 </html>
