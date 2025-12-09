@@ -1,263 +1,342 @@
 <!DOCTYPE html>
 <html lang="cs">
 <head>
-    <meta charset="UTF-8" />
-    <title>Seznámení s dokumenty</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 980px;
-            margin: auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-        h1, h2 { color: #333; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 10px; border: 1px solid #bbb; background: #fff; }
-        th { background: #e6e6e6; text-align: left; }
-        .hidden { display: none; }
-        #confirmBtn, #refreshBtn {
-            margin-top: 16px;
-            padding: 10px 14px;
-            font-size: 15px;
-            background: #0066cc;
-            color: white;
-            border: none;
-            cursor: pointer;
-            border-radius: 6px;
-        }
-        #confirmBtn[disabled], #refreshBtn[disabled] { opacity: 0.6; cursor: not-allowed; }
-        #refreshBtn { background: #777; margin-left: 10px; }
-        #errorMsg { color: red; font-weight: bold; margin-bottom: 10px; }
-        #status { margin-top: 12px; font-weight: bold; }
-        .small { font-size: 0.9rem; color: #555; }
-    </style>
+  <meta charset="utf-8"/>
+  <title>Seznámení s dokumenty — ověření kódem</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; max-width:980px; margin:auto; padding:20px; background:#f5f5f5; }
+    h1,h2{ color:#333 }
+    .box { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.05); }
+    label{ display:block; margin-top:12px; font-weight:600 }
+    input[type="text"]{ width:300px; padding:8px; font-size:14px; margin-top:6px }
+    button{ padding:10px 14px; font-size:14px; border-radius:6px; border:none; cursor:pointer }
+    #verifyBtn{ background:#0066cc; color:#fff }
+    #verifyBtn[disabled]{ opacity:.6; cursor:not-allowed }
+    #refreshBtn{ background:#777; color:#fff; margin-left:10px }
+    table{ width:100%; border-collapse:collapse; margin-top:12px }
+    th,td{ padding:10px; border:1px solid #ddd; background:#fff; text-align:left }
+    th{ background:#f0f0f0 }
+    #errorMsg{ color:#a00; font-weight:700; margin-top:12px }
+    #status{ margin-top:10px; font-weight:600 }
+    .small{ color:#555; font-size:0.9rem }
+  </style>
 </head>
-
 <body>
-<h1>Evidence seznámení</h1>
-<div id="errorMsg"></div>
+  <h1>Seznámení s řízenou dokumentací</h1>
 
-<div id="loading">Načítám data…</div>
+  <div id="errorMsg"></div>
 
-<div id="content" class="hidden">
-    <button id="refreshBtn">Obnovit seznam</button>
+  <!-- Krok 1: zadání kódu -->
+  <div id="codeSection" class="box">
+    <div class="small">Zadejte prosím bezpečnostní kód, aby se zabránilo neoprávněným požadavkům na backend.</div>
+    <label for="codeInput">Kód</label>
+    <input id="codeInput" type="text" inputmode="latin" autocomplete="off" placeholder="Zadejte kód">
+    <div style="margin-top:10px">
+      <button id="verifyBtn">Ověřit</button>
+      <button id="refreshBtn" style="display:inline-block" disabled>Obnovit seznam</button>
+    </div>
+    <div id="verifyStatus" class="small"></div>
+  </div>
+
+  <div id="loading" style="margin-top:14px"> </div>
+
+  <!-- Hlavní obsah: tabulky (skryté, dokud neověřen) -->
+  <div id="content" class="box" style="margin-top:14px; display:none">
+    <div class="small">Formulář ID: skryt (není zobrazeno)</div>
 
     <h2>Dokumenty čekající na seznámení</h2>
     <table id="pendingTable">
-        <thead>
-            <tr>
-                <th style="width:40px"></th>
-                <th>Název dokumentu</th>
-                <th>Datum požadavku</th>
-                <th>Odkaz</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
+      <thead>
+        <tr><th style="width:40px"></th><th>Název dokumentu</th><th>Datum požadavku</th><th>Odkaz</th></tr>
+      </thead>
+      <tbody></tbody>
     </table>
 
     <h2>Dokumenty již seznámené</h2>
     <table id="doneTable">
-        <thead>
-            <tr>
-                <th>Název dokumentu</th>
-                <th>Datum požadavku</th>
-                <th>Datum seznámení</th>
-                <th>Odkaz</th>
-            </tr>
-        </thead>
-        <tbody></tbody>
+      <thead>
+        <tr><th>Název dokumentu</th><th>Datum požadavku</th><th>Datum seznámení</th><th>Odkaz</th></tr>
+      </thead>
+      <tbody></tbody>
     </table>
 
-    <div>
-      <button id="confirmBtn" class="hidden" disabled>Potvrdit seznámení s dokumenty</button>
+    <div style="margin-top:12px">
+      <button id="confirmBtn" disabled>Potvrdit seznámení s dokumenty</button>
       <span id="status"></span>
     </div>
-</div>
+  </div>
 
 <script>
-// ---------- KONFIGURACE ENDPOINTŮ ----------
+// ========== CONFIG ==========
 const LOAD_ENDPOINT = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
 const CONFIRM_ENDPOINT = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/1bb26896b1f2431bb7121fbda5e67851/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=O_cmrJd_YpxbBAlzQRmQpyGw2mTXKTdi-NX16NnT1VY";
 
-// ---------- ZÍSKÁNÍ ID Z URL ----------
+// timeout pro ověřovací volání (ms)
+const VERIFY_TIMEOUT_MS = 10000;
+
+// lokální ochrana proti příliš mnoha pokusům (per ID)
+const MAX_ATTEMPTS = 10;
+const WINDOW_MS = 10 * 60 * 1000; // 10 minut
+
+// ========== HELPERS ==========
 function getIdFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("id");
+  return new URLSearchParams(window.location.search).get("id");
 }
 const USER_ID = getIdFromUrl();
 
-if (!USER_ID) {
-    document.getElementById("errorMsg").innerText = "Chybí parametr ?id= v URL!";
+function escapeHtml(s){ if(s==null) return ""; return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeAttr(s){ if(s==null) return "#"; return String(s).replace(/"/g,'&quot;'); }
+
+function getAttemptsKey(id){ return "sezn_attempts_" + id; }
+function recordAttempt(id){
+  try{
+    const key = getAttemptsKey(id);
+    const raw = localStorage.getItem(key);
+    let arr = raw ? JSON.parse(raw) : [];
+    // odstraníme staré záznamy
+    const cut = Date.now() - WINDOW_MS;
+    arr = arr.filter(ts => ts > cut);
+    arr.push(Date.now());
+    localStorage.setItem(key, JSON.stringify(arr));
+    return arr.length;
+  }catch(e){ return 0; }
+}
+function getAttempts(id){
+  try{
+    const raw = localStorage.getItem(getAttemptsKey(id));
+    const arr = raw ? JSON.parse(raw) : [];
+    const cut = Date.now() - WINDOW_MS;
+    return arr.filter(ts => ts > cut).length;
+  }catch(e){ return 0; }
 }
 
-// ---------- POMOCNÉ ELEMENTY ----------
+// ======== UI elements ========
+const codeInput = document.getElementById("codeInput");
+const verifyBtn = document.getElementById("verifyBtn");
+const refreshBtn = document.getElementById("refreshBtn");
+const verifyStatus = document.getElementById("verifyStatus");
 const loadingEl = document.getElementById("loading");
 const contentEl = document.getElementById("content");
-const errorEl = document.getElementById("errorMsg");
 const pendingTbody = document.querySelector("#pendingTable tbody");
 const doneTbody = document.querySelector("#doneTable tbody");
 const confirmBtn = document.getElementById("confirmBtn");
-const refreshBtn = document.getElementById("refreshBtn");
+const errorMsg = document.getElementById("errorMsg");
 const statusEl = document.getElementById("status");
 
-// ---------- NACITANI DAT ----------
-async function loadData() {
-    errorEl.textContent = "";
-    statusEl.textContent = "";
-    confirmBtn.disabled = true;
-    confirmBtn.classList.add("hidden");
-    loadingEl.style.display = "block";
-    contentEl.classList.add("hidden");
-    pendingTbody.innerHTML = "";
-    doneTbody.innerHTML = "";
-
-    if (!USER_ID) {
-        loadingEl.style.display = "none";
-        return;
-    }
-
-    try {
-        const res = await fetch(LOAD_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: USER_ID })
-        });
-
-        if (!res.ok) {
-            throw new Error("API vrátilo status " + res.status);
-        }
-
-        const data = await res.json();
-
-        renderTables(data);
-    } catch (e) {
-        errorEl.textContent = "Nepodařilo se načíst data: " + e.message;
-    } finally {
-        loadingEl.style.display = "none";
-    }
+// initial UI
+if (!USER_ID) {
+  errorMsg.textContent = "Chybí parametr ?id= v URL! Formulář nelze načíst.";
+  verifyBtn.disabled = true;
+  codeInput.disabled = true;
 }
 
-// ---------- VYKRESLENI TABULEK ----------
-function renderTables(data) {
-    contentEl.classList.remove("hidden");
+// ========== VERIFY (kód) ==========
+verifyBtn.addEventListener("click", async () => {
+  errorMsg.textContent = "";
+  verifyStatus.textContent = "";
+  loadingEl.textContent = "Ověřuji kód…";
+  verifyBtn.disabled = true;
+  refreshBtn.disabled = true;
 
-    let hasPending = false;
+  const code = (codeInput.value || "").trim();
+  if (!code) {
+    verifyStatus.textContent = "Zadejte prosím kód.";
+    verifyBtn.disabled = false;
+    refreshBtn.disabled = false;
+    loadingEl.textContent = "";
+    return;
+  }
 
-    data.forEach(doc => {
-        if (!doc) return;
-        const isPending = (!doc.datumSeznameni || doc.datumSeznameni === "");
+  // lokální rate limit per id
+  const attempts = recordAttempt(USER_ID);
+  if (attempts > MAX_ATTEMPTS) {
+    verifyStatus.textContent = `Příliš mnoho pokusů (${attempts}) — zkuste to prosím později.`;
+    verifyBtn.disabled = false;
+    refreshBtn.disabled = false;
+    loadingEl.textContent = "";
+    return;
+  }
 
-        if (isPending) {
-            hasPending = true;
-            const tr = document.createElement("tr");
-            // checkbox cell
-            const checkboxId = "chk_" + (doc.id ?? Math.random().toString(36).slice(2,8));
-            tr.innerHTML = `
-                <td style="text-align:center"><input type="checkbox" data-docid="${doc.id ?? ''}" id="${checkboxId}"></td>
-                <td>${escapeHtml(doc.nazevSouboru)}</td>
-                <td>${escapeHtml(doc.datumPozadavku || '')}</td>
-                <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít dokument</a></td>
-            `;
-            pendingTbody.appendChild(tr);
+  // fetch s timeoutem (AbortController)
+  const controller = new AbortController();
+  const idTimeout = setTimeout(()=>controller.abort(), VERIFY_TIMEOUT_MS);
 
-            // checkbox change handler
-            const cb = tr.querySelector("input[type=checkbox]");
-            cb.addEventListener("change", onCheckboxChange);
-        } else {
-            const tr = document.createElement("tr");
-            tr.innerHTML = `
-                <td>${escapeHtml(doc.nazevSouboru)}</td>
-                <td>${escapeHtml(doc.datumPozadavku || '')}</td>
-                <td>${escapeHtml(doc.datumSeznameni || '')}</td>
-                <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít dokument</a></td>
-            `;
-            doneTbody.appendChild(tr);
-        }
+  try {
+    const res = await fetch(LOAD_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: USER_ID, code: code }),
+      signal: controller.signal
     });
+    clearTimeout(idTimeout);
 
-    // toggle confirm button visibility
-    if (hasPending) {
-        confirmBtn.classList.remove("hidden");
-        confirmBtn.disabled = true; // enabled only when at least one checkbox checked
+    if (!res.ok) {
+      // Flow se nespustil / vrátil error → považujeme za chybný kód nebo backend error
+      verifyStatus.textContent = "Chybný kód nebo chyba serveru.";
+      verifyBtn.disabled = false;
+      refreshBtn.disabled = false;
+      loadingEl.textContent = "";
+      return;
+    }
+
+    // pokusíme se získat JSON; pokud ne, chyba
+    let data;
+    try { data = await res.json(); } catch(e) {
+      verifyStatus.textContent = "Neplatná odpověď od serveru.";
+      verifyBtn.disabled = false;
+      refreshBtn.disabled = false;
+      loadingEl.textContent = "";
+      return;
+    }
+
+    // validace - očekáváme pole objektů
+    if (!Array.isArray(data)) {
+      verifyStatus.textContent = "Neočekávaný formát dat.";
+      verifyBtn.disabled = false;
+      refreshBtn.disabled = false;
+      loadingEl.textContent = "";
+      return;
+    }
+
+    // úspěšné ověření → zobrazit obsah
+    loadingEl.textContent = "";
+    verifyStatus.textContent = "Kód OK — data načtena.";
+    showContentWithData(data);
+
+  } catch (err) {
+    clearTimeout(idTimeout);
+    if (err.name === "AbortError") {
+      verifyStatus.textContent = "Vypršel časový limit (timeout) — pravděpodobně chybný kód nebo backend neodpověděl.";
     } else {
-        confirmBtn.classList.add("hidden");
+      verifyStatus.textContent = "Chyba komunikace: " + err.message;
     }
-}
+    verifyBtn.disabled = false;
+    refreshBtn.disabled = false;
+    loadingEl.textContent = "";
+  }
+});
 
-// ---------- CHECKBOX HANDLER ----------
-function onCheckboxChange() {
-    const anyChecked = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]"))
-        .some(cb => cb.checked);
-    confirmBtn.disabled = !anyChecked;
-}
+// ======== ZOBRAZENÍ DAT A LOGIKA TLAČÍTEK ========
+function showContentWithData(data){
+  // zobraz obsah a vyplň tabulky
+  contentEl.style.display = "block";
+  pendingTbody.innerHTML = "";
+  doneTbody.innerHTML = "";
+  confirmBtn.disabled = true;
 
-// ---------- ESCAPE HELPERS (safety) ----------
-function escapeHtml(s) {
-    if (s == null) return "";
-    return String(s).replace(/[&<>"']/g, function (m) {
-        return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
-    });
-}
-function escapeAttr(s) {
-    if (s == null) return "#";
-    return String(s).replace(/"/g, '&quot;');
-}
+  let hasPending = false;
+  data.forEach(doc => {
+    if (!doc) return;
+    const pending = (!doc.datumSeznameni || doc.datumSeznameni === "");
+    if (pending) {
+      hasPending = true;
+      const tr = document.createElement("tr");
+      const cbId = "cb_" + (doc.id ?? Math.random().toString(36).slice(2,8));
+      tr.innerHTML = `
+        <td style="text-align:center"><input type="checkbox" id="${cbId}" data-docid="${escapeHtml(doc.id)}"></td>
+        <td>${escapeHtml(doc.nazevSouboru)}</td>
+        <td>${escapeHtml(doc.datumPozadavku || "")}</td>
+        <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít</a></td>
+      `;
+      pendingTbody.appendChild(tr);
+      tr.querySelector("input[type=checkbox]").addEventListener("change", onCheckboxChange);
+    } else {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(doc.nazevSouboru)}</td>
+        <td>${escapeHtml(doc.datumPozadavku || "")}</td>
+        <td>${escapeHtml(doc.datumSeznameni || "")}</td>
+        <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít</a></td>
+      `;
+      doneTbody.appendChild(tr);
+    }
+  });
 
-// ---------- ODESLÁNÍ POTVRZENÍ ----------
-confirmBtn.addEventListener("click", async () => {
-    errorEl.textContent = "";
-    statusEl.textContent = "Odesílám potvrzení…";
+  // enable refresh
+  refreshBtn.disabled = false;
+
+  // if any pending items exist -> show confirm button area; button still disabled until checkbox selected
+  if (hasPending) {
     confirmBtn.disabled = true;
-    refreshBtn.disabled = true;
+    confirmBtn.style.display = "inline-block";
+  } else {
+    confirmBtn.style.display = "none";
+  }
 
-    // sestav vybraná ID
-    const selected = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]:checked"))
-        .map(cb => cb.getAttribute("data-docid"))
-        .filter(x => x); // vyfiltrovat prázdná
+  // schovej code section (pokud chceš, můžeš ho i ponechat)
+  // document.getElementById("codeSection").style.display = "none";
+  // my necháme kód viditelný pokud chceš, nebo odkomentuj horní řádek pro skrytí
+}
 
-    if (selected.length === 0) {
-        statusEl.textContent = "Vyberte prosím alespoň jeden dokument.";
-        confirmBtn.disabled = false;
-        refreshBtn.disabled = false;
-        return;
+// checkbox handler
+function onCheckboxChange(){
+  const anyChecked = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]"))
+    .some(cb => cb.checked);
+  confirmBtn.disabled = !anyChecked;
+}
+
+// ======== ODESLÁNÍ POTVRZENÍ ========
+confirmBtn.addEventListener("click", async () => {
+  errorMsg.textContent = "";
+  statusEl.textContent = "Odesílám potvrzení…";
+  confirmBtn.disabled = true;
+  refreshBtn.disabled = true;
+
+  const selected = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]:checked"))
+    .map(cb => cb.getAttribute("data-docid"))
+    .filter(x => x);
+
+  if (selected.length === 0) {
+    statusEl.textContent = "Vyberte alespoň jeden dokument.";
+    confirmBtn.disabled = false;
+    refreshBtn.disabled = false;
+    return;
+  }
+
+  const payload = {
+    formId: USER_ID,
+    timestamp: new Date().toISOString(),
+    selectedIds: selected
+  };
+
+  try {
+    const res = await fetch(CONFIRM_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(()=>"");
+      throw new Error("API vrátilo status " + res.status + (text ? " — " + text : ""));
     }
 
-    const payload = {
-        formId: USER_ID,
-        timestamp: new Date().toISOString(),
-        selectedIds: selected
-    };
+    // success -> reload page (A)
+    window.location.reload(true);
 
-    try {
-        const res = await fetch(CONFIRM_ENDPOINT, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        if (!res.ok) {
-            const text = await res.text().catch(()=>"");
-            throw new Error("API vrátilo status " + res.status + (text ? " — " + text : ""));
-        }
-
-        // úspěch → reload (A)
-        window.location.reload(true);
-    } catch (e) {
-        errorEl.textContent = "Chyba při odesílání potvrzení: " + e.message;
-        statusEl.textContent = "";
-        confirmBtn.disabled = false;
-        refreshBtn.disabled = false;
-    }
+  } catch (e) {
+    errorMsg.textContent = "Chyba při odesílání potvrzení: " + e.message;
+    statusEl.textContent = "";
+    confirmBtn.disabled = false;
+    refreshBtn.disabled = false;
+  }
 });
 
-// ---------- REFRESH TLAČÍTKO ----------
+// ========== REFRESH ==========
 refreshBtn.addEventListener("click", () => {
-    loadData();
+  // reset status and let verify again - we still require valid code to fetch data
+  verifyStatus.textContent = "";
+  loadingEl.textContent = "";
+  // we allow manual refresh by re-starting the verify flow: basically click verify again
+  // but we can call loadData only if already verified (we don't store verified state persistently)
+  // for simplicity, trigger the click handler for verify: but require code present
+  // We'll simply attempt to re-run verify logic (simulate user pressing Verify)
+  verifyBtn.click();
 });
 
-// ---------- START ----------
-loadData();
+// ========== START: nothing is fetched until user enters code and clicks Verify ==========
+loadingEl.textContent = "Zadejte kód a klikněte Ověřit.";
 </script>
 </body>
 </html>
