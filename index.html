@@ -38,7 +38,17 @@
 <h1>Evidence seznámení</h1>
 <div id="errorMsg"></div>
 
-<div id="loading">Načítám data…</div>
+<div id="authSection">
+    <div style="max-width: 400px; margin: 50px auto; padding: 30px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <h2 style="text-align: center; margin-bottom: 20px;">Ověření totožnosti</h2>
+        <p style="color: #666; margin-bottom: 20px;">Zadejte kód ze svého emailu:</p>
+        <input type="password" id="passwordInput" placeholder="Kód z emailu" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box;">
+        <button id="authBtn" style="width: 100%; padding: 10px 14px; font-size: 15px; background: #0066cc; color: white; border: none; cursor: pointer; border-radius: 6px;">Potvrdit</button>
+        <div id="authError" style="color: red; margin-top: 10px; font-size: 14px;"></div>
+    </div>
+</div>
+
+<div id="loading" class="hidden">Načítám data…</div>
 
 <div id="content" class="hidden">
     <button id="refreshBtn">Obnovit seznam</button>
@@ -92,6 +102,10 @@ if (!USER_ID) {
 }
 
 // ---------- POMOCNÉ ELEMENTY ----------
+const authSection = document.getElementById("authSection");
+const authBtn = document.getElementById("authBtn");
+const passwordInput = document.getElementById("passwordInput");
+const authError = document.getElementById("authError");
 const loadingEl = document.getElementById("loading");
 const contentEl = document.getElementById("content");
 const errorEl = document.getElementById("errorMsg");
@@ -100,6 +114,46 @@ const doneTbody = document.querySelector("#doneTable tbody");
 const confirmBtn = document.getElementById("confirmBtn");
 const refreshBtn = document.getElementById("refreshBtn");
 const statusEl = document.getElementById("status");
+
+let PASSWORD = null; // bude nastaveno po autentifikaci
+
+// ---------- AUTENTIFIKACE ----------
+function initAuth() {
+    // Pokus se načíst heslo z localStorage
+    const savedPassword = localStorage.getItem("authPassword_" + USER_ID);
+    if (savedPassword) {
+        PASSWORD = savedPassword;
+        authSection.classList.add("hidden");
+        loadData();
+    }
+}
+
+authBtn.addEventListener("click", async () => {
+    const password = passwordInput.value.trim();
+    
+    if (!password) {
+        authError.textContent = "Zadejte prosím kod z emailu.";
+        return;
+    }
+    
+    if (!USER_ID) {
+        authError.textContent = "Chybí parametr ?id= v URL!";
+        return;
+    }
+    
+    PASSWORD = password;
+    localStorage.setItem("authPassword_" + USER_ID, password);
+    authError.textContent = "";
+    authSection.classList.add("hidden");
+    loadData();
+});
+
+// Allow Enter key to submit password
+passwordInput.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") {
+        authBtn.click();
+    }
+});
 
 // ---------- NACITANI DAT ----------
 async function loadData() {
@@ -121,7 +175,7 @@ async function loadData() {
         const res = await fetch(LOAD_ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: USER_ID })
+            body: JSON.stringify({ id: USER_ID, password: PASSWORD })
         });
 
         if (!res.ok) {
@@ -257,7 +311,9 @@ refreshBtn.addEventListener("click", () => {
 });
 
 // ---------- START ----------
-loadData();
+// Autentifikace je povinná - user musí zadat heslo
+initAuth();
+
 </script>
 </body>
 </html>
