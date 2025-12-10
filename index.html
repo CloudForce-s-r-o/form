@@ -6,87 +6,48 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 900px;
+            max-width: 980px;
             margin: auto;
             padding: 20px;
             background: #f5f5f5;
         }
-        h1, h2 {
-            color: #333;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            padding: 10px;
-            border: 1px solid #bbb;
-            background: #fff;
-        }
-        th {
-            background: #e6e6e6;
-        }
-        .hidden {
-            display: none;
-        }
-        button {
-            margin-top: 20px;
-            padding: 10px 18px;
+        h1, h2 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 10px; border: 1px solid #bbb; background: #fff; }
+        th { background: #e6e6e6; text-align: left; }
+        .hidden { display: none; }
+        #confirmBtn, #refreshBtn {
+            margin-top: 16px;
+            padding: 10px 14px;
+            font-size: 15px;
             background: #0066cc;
-            border: none;
-            border-radius: 5px;
             color: white;
+            border: none;
             cursor: pointer;
-        }
-        button:hover {
-            background: #004c99;
-        }
-        #errorMsg {
-            color: red;
-            font-weight: bold;
-        }
-        #verifySection, #content {
-            margin-top: 25px;
-            padding: 20px;
-            background: white;
             border-radius: 6px;
-            border: 1px solid #ccc;
         }
+        #confirmBtn[disabled], #refreshBtn[disabled] { opacity: 0.6; cursor: not-allowed; }
+        #refreshBtn { background: #777; margin-left: 10px; }
+        #errorMsg { color: red; font-weight: bold; margin-bottom: 10px; }
+        #status { margin-top: 12px; font-weight: bold; }
+        .small { font-size: 0.9rem; color: #555; }
     </style>
 </head>
 
 <body>
-
 <h1>Evidence seznámení</h1>
-
 <div id="errorMsg"></div>
 
-<!-- -------------------------------- -->
-<!--          OVĚŘENÍ KÓDU            -->
-<!-- -------------------------------- -->
-<div id="verifySection">
-    <h2>Ověření přístupu</h2>
-    <p>Zadejte ověřovací kód:</p>
-    <input id="accessCode" type="password" style="padding:8px; width:200px;" />
-    <br><br>
-    <button onclick="verifyCode()">Ověřit</button>
-</div>
+<div id="loading">Načítám data…</div>
 
-<div id="loading" class="hidden">Načítám data…</div>
-
-<!-- -------------------------------- -->
-<!--        HLAVNÍ OBSAH (DATA)       -->
-<!-- -------------------------------- -->
 <div id="content" class="hidden">
-
-    <button id="refreshBtn" onclick="refreshData()" class="hidden">Obnovit seznam</button>
+    <button id="refreshBtn">Obnovit seznam</button>
 
     <h2>Dokumenty čekající na seznámení</h2>
     <table id="pendingTable">
         <thead>
             <tr>
-                <th></th>
+                <th style="width:40px"></th>
                 <th>Název dokumentu</th>
                 <th>Datum požadavku</th>
                 <th>Odkaz</th>
@@ -108,13 +69,18 @@
         <tbody></tbody>
     </table>
 
-    <button id="confirmBtn" class="hidden">Potvrdit seznámení s dokumenty</button>
+    <div>
+      <button id="confirmBtn" class="hidden" disabled>Potvrdit seznámení s dokumenty</button>
+      <span id="status"></span>
+    </div>
 </div>
 
 <script>
-// ---------------------------
-// 1️⃣ ID z URL
-// ---------------------------
+// ---------- KONFIGURACE ENDPOINTŮ ----------
+const LOAD_ENDPOINT = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4";
+const CONFIRM_ENDPOINT = "https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/1bb26896b1f2431bb7121fbda5e67851/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=O_cmrJd_YpxbBAlzQRmQpyGw2mTXKTdi-NX16NnT1VY";
+
+// ---------- ZÍSKÁNÍ ID Z URL ----------
 function getIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return params.get("id");
@@ -125,121 +91,173 @@ if (!USER_ID) {
     document.getElementById("errorMsg").innerText = "Chybí parametr ?id= v URL!";
 }
 
-// ---------------------------
-// 2️⃣ Ověření kódu
-// ---------------------------
-function verifyCode() {
-    const code = document.getElementById("accessCode").value;
+// ---------- POMOCNÉ ELEMENTY ----------
+const loadingEl = document.getElementById("loading");
+const contentEl = document.getElementById("content");
+const errorEl = document.getElementById("errorMsg");
+const pendingTbody = document.querySelector("#pendingTable tbody");
+const doneTbody = document.querySelector("#doneTable tbody");
+const confirmBtn = document.getElementById("confirmBtn");
+const refreshBtn = document.getElementById("refreshBtn");
+const statusEl = document.getElementById("status");
 
-    if (!code) {
-        document.getElementById("errorMsg").innerText = "Zadejte ověřovací kód.";
+// ---------- NACITANI DAT ----------
+async function loadData() {
+    errorEl.textContent = "";
+    statusEl.textContent = "";
+    confirmBtn.disabled = true;
+    confirmBtn.classList.add("hidden");
+    loadingEl.style.display = "block";
+    contentEl.classList.add("hidden");
+    pendingTbody.innerHTML = "";
+    doneTbody.innerHTML = "";
+
+    if (!USER_ID) {
+        loadingEl.style.display = "none";
         return;
     }
 
-    // pošleme jen uživatelské ID + kód
-    loadData(code);
-}
-
-function refreshData() {
-    loadData("NO_CODE_RECHECK_NEEDED");
-}
-
-// ---------------------------
-// 3️⃣ Načtení dat z endpointu
-// ---------------------------
-async function loadData(codeValue) {
-    document.getElementById("errorMsg").innerHTML = "";
-    document.getElementById("loading").classList.remove("hidden");
-
     try {
-        const res = await fetch("https://default8da5bad552c84f89bb8a7500a8e0e2.53.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/11e51341bef74744be4c93cae776fcdf/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xmsWpFTdq319G3NqcGgUNE7lWh8jICKymOlyyUxZdS4", {
+        const res = await fetch(LOAD_ENDPOINT, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                id: USER_ID,
-                code: codeValue
-            })
+            body: JSON.stringify({ id: USER_ID })
         });
 
         if (!res.ok) {
-            throw new Error("Chyba komunikace s API.");
+            throw new Error("API vrátilo status " + res.status);
         }
 
         const data = await res.json();
 
-        // Hide code verification section
-        document.getElementById("verifySection").classList.add("hidden");
-
-        // Show refresh button
-        document.getElementById("refreshBtn").classList.remove("hidden");
-
         renderTables(data);
     } catch (e) {
-        document.getElementById("loading").classList.add("hidden");
-        document.getElementById("errorMsg").innerText =
-            "Chybný kód nebo problém s API.";
+        errorEl.textContent = "Nepodařilo se načíst data: " + e.message;
+    } finally {
+        loadingEl.style.display = "none";
     }
 }
 
-// ---------------------------
-// 4️⃣ Vykreslení tabulek
-// ---------------------------
+// ---------- VYKRESLENI TABULEK ----------
 function renderTables(data) {
-    document.getElementById("loading").classList.add("hidden");
-    document.getElementById("content").classList.remove("hidden");
-
-    const pendingTbody = document.querySelector("#pendingTable tbody");
-    const doneTbody = document.querySelector("#doneTable tbody");
-
-    pendingTbody.innerHTML = "";
-    doneTbody.innerHTML = "";
+    contentEl.classList.remove("hidden");
 
     let hasPending = false;
 
     data.forEach(doc => {
-        const row = document.createElement("tr");
+        if (!doc) return;
+        const isPending = (!doc.datumSeznameni || doc.datumSeznameni === "");
 
-        // NESEZNÁMENÉ
-        if (!doc.datumSeznameni) {
+        if (isPending) {
             hasPending = true;
-            row.innerHTML = `
-                <td><input type="checkbox" class="docCheck" value="${doc.id}"></td>
-                <td>${doc.nazevSouboru}</td>
-                <td>${doc.datumPozadavku}</td>
-                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
+            const tr = document.createElement("tr");
+            // checkbox cell
+            const checkboxId = "chk_" + (doc.id ?? Math.random().toString(36).slice(2,8));
+            tr.innerHTML = `
+                <td style="text-align:center"><input type="checkbox" data-docid="${doc.id ?? ''}" id="${checkboxId}"></td>
+                <td>${escapeHtml(doc.nazevSouboru)}</td>
+                <td>${escapeHtml(doc.datumPozadavku || '')}</td>
+                <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít dokument</a></td>
             `;
-            pendingTbody.appendChild(row);
+            pendingTbody.appendChild(tr);
 
-        // SEZNÁMENÉ
+            // checkbox change handler
+            const cb = tr.querySelector("input[type=checkbox]");
+            cb.addEventListener("change", onCheckboxChange);
         } else {
-            row.innerHTML = `
-                <td>${doc.nazevSouboru}</td>
-                <td>${doc.datumPozadavku}</td>
-                <td>${doc.datumSeznameni}</td>
-                <td><a href="${doc.odkazNaSoubor}" target="_blank">Otevřít dokument</a></td>
+            const tr = document.createElement("tr");
+            tr.innerHTML = `
+                <td>${escapeHtml(doc.nazevSouboru)}</td>
+                <td>${escapeHtml(doc.datumPozadavku || '')}</td>
+                <td>${escapeHtml(doc.datumSeznameni || '')}</td>
+                <td><a href="${escapeAttr(doc.odkazNaSoubor)}" target="_blank">Otevřít dokument</a></td>
             `;
-            doneTbody.appendChild(row);
+            doneTbody.appendChild(tr);
         }
     });
 
-    const btn = document.getElementById("confirmBtn");
-
+    // toggle confirm button visibility
     if (hasPending) {
-        btn.classList.remove("hidden");
+        confirmBtn.classList.remove("hidden");
+        confirmBtn.disabled = true; // enabled only when at least one checkbox checked
     } else {
-        btn.classList.add("hidden");
+        confirmBtn.classList.add("hidden");
     }
-
-    // Aktivace dle checkboxů
-    document.querySelectorAll(".docCheck").forEach(chk => {
-        chk.addEventListener("change", () => {
-            const anyChecked = document.querySelectorAll(".docCheck:checked").length > 0;
-            if (anyChecked) btn.classList.remove("hidden");
-            else if (!hasPending) btn.classList.add("hidden");
-        });
-    });
 }
 
+// ---------- CHECKBOX HANDLER ----------
+function onCheckboxChange() {
+    const anyChecked = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]"))
+        .some(cb => cb.checked);
+    confirmBtn.disabled = !anyChecked;
+}
+
+// ---------- ESCAPE HELPERS (safety) ----------
+function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, function (m) {
+        return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m];
+    });
+}
+function escapeAttr(s) {
+    if (s == null) return "#";
+    return String(s).replace(/"/g, '&quot;');
+}
+
+// ---------- ODESLÁNÍ POTVRZENÍ ----------
+confirmBtn.addEventListener("click", async () => {
+    errorEl.textContent = "";
+    statusEl.textContent = "Odesílám potvrzení…";
+    confirmBtn.disabled = true;
+    refreshBtn.disabled = true;
+
+    // sestav vybraná ID
+    const selected = Array.from(document.querySelectorAll("#pendingTable tbody input[type=checkbox]:checked"))
+        .map(cb => cb.getAttribute("data-docid"))
+        .filter(x => x); // vyfiltrovat prázdná
+
+    if (selected.length === 0) {
+        statusEl.textContent = "Vyberte prosím alespoň jeden dokument.";
+        confirmBtn.disabled = false;
+        refreshBtn.disabled = false;
+        return;
+    }
+
+    const payload = {
+        formId: USER_ID,
+        timestamp: new Date().toISOString(),
+        selectedIds: selected
+    };
+
+    try {
+        const res = await fetch(CONFIRM_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const text = await res.text().catch(()=>"");
+            throw new Error("API vrátilo status " + res.status + (text ? " — " + text : ""));
+        }
+
+        // úspěch → reload (A)
+        window.location.reload(true);
+    } catch (e) {
+        errorEl.textContent = "Chyba při odesílání potvrzení: " + e.message;
+        statusEl.textContent = "";
+        confirmBtn.disabled = false;
+        refreshBtn.disabled = false;
+    }
+});
+
+// ---------- REFRESH TLAČÍTKO ----------
+refreshBtn.addEventListener("click", () => {
+    loadData();
+});
+
+// ---------- START ----------
+loadData();
 </script>
 </body>
 </html>
