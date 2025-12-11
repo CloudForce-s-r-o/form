@@ -142,7 +142,6 @@ authBtn.addEventListener("click", async () => {
     }
     
     PASSWORD = password;
-    localStorage.setItem("authPassword_" + USER_ID, password);
     authError.textContent = "";
     authSection.classList.add("hidden");
     loadData();
@@ -184,9 +183,15 @@ async function loadData() {
 
         const data = await res.json();
 
+        // Heslo se uloží až po úspěšné odpovědi
+        localStorage.setItem("authPassword_" + USER_ID, PASSWORD);
+
         renderTables(data);
     } catch (e) {
-        errorEl.textContent = "Nepodařilo se načíst data: " + e.message;
+        errorEl.textContent = "Zadali jste špatné heslo.";
+        // Když se chyba stane, zase se zeptáme na heslo
+        authSection.classList.remove("hidden");
+        PASSWORD = null;
     } finally {
         loadingEl.style.display = "none";
     }
